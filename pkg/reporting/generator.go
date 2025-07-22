@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"html/template"
 	"os"
-	"sort"
 	"strings"
 	"time"
 
@@ -57,10 +56,21 @@ type ExecutiveSummary struct {
 
 // VulnerabilityAnalysis provides detailed vulnerability breakdown
 type VulnerabilityAnalysis struct {
-	ByCategory map[string]int        `json:"by_category"`
-	BySeverity map[string]int        `json:"by_severity"`
-	TopIssues  []VulnerabilityDetail `json:"top_issues"`
-	TrendData  []VulnerabilityTrend  `json:"trend_data"`
+	ByCategory     map[string]int                         `json:"by_category"`
+	BySeverity     map[string]int                         `json:"by_severity"`
+	TopIssues      []VulnerabilityDetail                  `json:"top_issues"`
+	TrendData      []VulnerabilityTrend                   `json:"trend_data"`
+	ModuleAnalysis map[string]ModuleVulnerabilityAnalysis `json:"module_analysis"`
+}
+
+type ModuleVulnerabilityAnalysis struct {
+	ModuleName        string                `json:"module_name"`
+	TestsExecuted     int                   `json:"tests_executed"`
+	VulnCount         int                   `json:"vuln_count"`
+	HighestSeverity   string                `json:"highest_severity"`
+	Vulnerabilities   []VulnerabilityDetail `json:"vulnerabilities"`
+	TestDuration      time.Duration         `json:"test_duration"`
+	RequestsPerSecond float64               `json:"requests_per_second"`
 }
 
 // VulnerabilityDetail provides enhanced vulnerability information
@@ -179,82 +189,34 @@ func (rg *ReportGenerator) generateExecutiveSummary(result *attack.AttackResult)
 		HighRiskIssues:   result.HighCount,
 	}
 
-	// Calculate overall risk level
-	if result.CriticalCount > 0 {
+	// Calculate overall risk level based on actual exploitability
+	if summary.SecurityScore < 30 {
 		summary.OverallRiskLevel = "CRITICAL"
-	} else if result.HighCount > 0 {
+	} else if summary.SecurityScore < 50 {
 		summary.OverallRiskLevel = "HIGH"
-	} else if result.MediumCount > 0 {
+	} else if summary.SecurityScore < 70 {
 		summary.OverallRiskLevel = "MEDIUM"
-	} else if result.LowCount > 0 {
+	} else if summary.SecurityScore < 90 {
 		summary.OverallRiskLevel = "LOW"
 	} else {
 		summary.OverallRiskLevel = "MINIMAL"
 	}
 
-	// Calculate security score (inverse of vulnerabilities found)
-	summary.SecurityScore = 100
-	if result.TotalVulnerabilities > 0 {
-		penalty := result.CriticalCount*25 + result.HighCount*15 + result.MediumCount*10 + result.LowCount*5
-		summary.SecurityScore = max(0, 100-penalty)
-	}
+	// Calculate realistic security score
+	summary.SecurityScore = rg.calculateModularSecurityScore(result)
 
 	// Calculate compliance score (based on security headers and best practices)
 	summary.ComplianceScore = rg.calculateComplianceScore(result)
 
 	// Calculate test coverage
 	if result.APIEnumeration != nil {
-		summary.TestCoverage = float64(len(result.APIEnumeration.FoundEndpoints)) / float64(result.APIEnumeration.TestedEndpoints) * 100
+		summary.TestCoverage = (float64(len(result.APIEnumeration.FoundEndpoints)) / float64(result.APIEnumeration.TestedEndpoints)) * 100
 	}
 
-	// Count recommended actions
-	summary.RecommendedActions = result.TotalVulnerabilities + 3 // Base recommendations
+	// Count recommended actions (realistic number)
+	summary.RecommendedActions = min(result.TotalVulnerabilities, 10) + 2
 
 	return summary
-}
-
-// analyzeVulnerabilities provides detailed vulnerability analysis
-func (rg *ReportGenerator) analyzeVulnerabilities(result *attack.AttackResult) VulnerabilityAnalysis {
-	analysis := VulnerabilityAnalysis{
-		ByCategory: make(map[string]int),
-		BySeverity: make(map[string]int),
-		TopIssues:  []VulnerabilityDetail{},
-	}
-
-	// Process API enumeration vulnerabilities
-	if result.APIEnumeration != nil {
-		for _, vuln := range result.APIEnumeration.Vulnerabilities {
-			// Count by category
-			analysis.ByCategory[vuln.Type]++
-
-			// Count by severity
-			analysis.BySeverity[vuln.Severity]++
-
-			// Create enhanced vulnerability detail
-			detail := VulnerabilityDetail{
-				VulnerabilityFinding: vuln,
-				RiskScore:            rg.calculateRiskScore(vuln),
-				AffectedURLs:         []string{vuln.Endpoint},
-			}
-
-			// Add references based on vulnerability type
-			detail.References = rg.getVulnerabilityReferences(vuln.Type)
-
-			analysis.TopIssues = append(analysis.TopIssues, detail)
-		}
-	}
-
-	// Sort top issues by risk score
-	sort.Slice(analysis.TopIssues, func(i, j int) bool {
-		return analysis.TopIssues[i].RiskScore > analysis.TopIssues[j].RiskScore
-	})
-
-	// Limit to top 10 issues
-	if len(analysis.TopIssues) > 10 {
-		analysis.TopIssues = analysis.TopIssues[:10]
-	}
-
-	return analysis
 }
 
 // calculatePerformanceMetrics computes performance-related metrics

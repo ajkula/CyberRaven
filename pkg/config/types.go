@@ -7,19 +7,19 @@ import (
 // Config represents the main CyberRaven configuration
 type Config struct {
 	// Core engine settings
-	Engine EngineConfig `yaml:"engine" json:"engine"`
+	Engine *EngineConfig `yaml:"engine" json:"engine"`
 
 	// Target configuration
-	Target TargetConfig `yaml:"target" json:"target"`
+	Target *TargetConfig `yaml:"target" json:"target"`
 
 	// Attack modules configuration
-	Attacks AttacksConfig `yaml:"attacks" json:"attacks"`
+	Attacks *AttacksConfig `yaml:"attacks" json:"attacks"`
 
 	// Reporting configuration
-	Reports ReportsConfig `yaml:"reports" json:"reports"`
+	Reports *ReportsConfig `yaml:"reports" json:"reports"`
 
 	// Output and UI configuration
-	Output OutputConfig `yaml:"output" json:"output"`
+	Output *OutputConfig `yaml:"output" json:"output"`
 
 	// Logging configuration
 	Logging LoggingConfig `yaml:"logging" json:"logging"`
@@ -132,12 +132,12 @@ type AttacksConfig struct {
 	Aggressive bool     `yaml:"aggressive" json:"aggressive"` // Enable aggressive testing mode
 
 	// Individual module configurations
-	JWT       JWTAttackConfig       `yaml:"jwt" json:"jwt"`
-	HMAC      HMACAttackConfig      `yaml:"hmac" json:"hmac"`
-	API       APIAttackConfig       `yaml:"api" json:"api"`
-	Injection InjectionAttackConfig `yaml:"injection" json:"injection"`
-	DoS       DoSAttackConfig       `yaml:"dos" json:"dos"`
-	TLS       TLSAttackConfig       `yaml:"tls" json:"tls"`
+	JWT       *JWTAttackConfig       `yaml:"jwt,omitempty" json:"jwt,omitempty"`
+	HMAC      *HMACAttackConfig      `yaml:"hmac,omitempty" json:"hmac,omitempty"`
+	API       *APIAttackConfig       `yaml:"api,omitempty" json:"api,omitempty"`
+	Injection *InjectionAttackConfig `yaml:"injection,omitempty" json:"injection,omitempty"`
+	DoS       *DoSAttackConfig       `yaml:"dos,omitempty" json:"dos,omitempty"`
+	TLS       *TLSAttackConfig       `yaml:"tls,omitempty" json:"tls,omitempty"`
 }
 
 // JWTAttackConfig defines JWT-specific attack parameters

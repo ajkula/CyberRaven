@@ -39,6 +39,7 @@ type NetworkEngine struct {
 	packetSource *gopacket.PacketSource
 	assembler    *tcpassembly.Assembler
 	factory      *httpStreamFactory
+	tlsAnalyzer  *TLSAnalyzer
 
 	// Control channels
 	isCapturing int32 // atomic
@@ -110,6 +111,7 @@ func NewNetworkEngine(config *config.SnifferConfig, interfaceName string) (*Netw
 
 	engine := &NetworkEngine{
 		config:        config,
+		tlsAnalyzer:   NewTLSAnalyzer(true),
 		interfaceName: interfaceName,
 		snapLength:    65536, // 64KB - capture full packets
 		promiscuous:   false, // Only capture traffic to/from this host by default
@@ -259,6 +261,13 @@ func (ne *NetworkEngine) processPacket(packet gopacket.Packet) {
 	}
 }
 
+func (ne *NetworkEngine) GetTLSIntelligence() TLSIntelligence {
+	if ne.tlsAnalyzer == nil {
+		return TLSIntelligence{}
+	}
+	return ne.tlsAnalyzer.GetTLSIntelligence()
+}
+
 // processTCPPacket handles TCP packets for stream reassembly
 func (ne *NetworkEngine) processTCPPacket(packet gopacket.Packet, tcp *layers.TCP) {
 	// Check if this is HTTP traffic (port 80, 8080, etc.) or HTTPS (port 443, 8443, etc.)
@@ -268,25 +277,42 @@ func (ne *NetworkEngine) processTCPPacket(packet gopacket.Packet, tcp *layers.TC
 	isHTTP := ne.isHTTPPort(srcPort) || ne.isHTTPPort(dstPort)
 	isHTTPS := ne.isHTTPSPort(srcPort) || ne.isHTTPSPort(dstPort)
 
-	if !isHTTP && !isHTTPS {
-		return // Not HTTP/HTTPS traffic
-	}
+	// if !isHTTP && !isHTTPS {
+	// 	return // Not HTTP/HTTPS traffic
+	// }
 
 	// Update protocol-specific counters
-	if isHTTP {
-		atomic.AddInt64(&ne.httpPackets, 1)
-	} else if isHTTPS {
-		atomic.AddInt64(&ne.httpsPackets, 1)
-	}
 
-	// Feed packet to TCP assembler for stream reconstruction
-	networkLayer := packet.NetworkLayer()
-	if networkLayer != nil {
-		ne.assembler.AssembleWithTimestamp(
-			networkLayer.NetworkFlow(),
-			tcp,
-			packet.Metadata().Timestamp,
-		)
+	if isHTTPS {
+		atomic.AddInt64(&ne.httpsPackets, 1)
+		ne.tlsAnalyzer.ProcessTLSPacket(packet)
+	} else if isHTTP {
+		atomic.AddInt64(&ne.httpPackets, 1)
+
+		// **CRITICAL ADDITION:** Detect TLS on HTTP ports (like 8080)
+		if len(tcp.Payload) >= 3 {
+			recordType := tcp.Payload[0]
+			tlsVersion := tcp.Payload[1]
+
+			// Check if this is TLS traffic on HTTP port
+			if (recordType >= 0x14 && recordType <= 0x17) && tlsVersion == 0x03 {
+				fmt.Printf("[DEBUG] TLS detected on HTTP port (type: 0x%02x, version: 0x%02x), calling TLS Analyzer\n",
+					recordType, tlsVersion)
+				ne.tlsAnalyzer.ProcessTLSPacket(packet)
+				return // Don't process as HTTP
+			}
+		}
+
+		// Normal HTTP processing...
+		// Feed packet to TCP assembler for stream reconstruction
+		networkLayer := packet.NetworkLayer()
+		if networkLayer != nil {
+			ne.assembler.AssembleWithTimestamp(
+				networkLayer.NetworkFlow(),
+				tcp,
+				packet.Metadata().Timestamp,
+			)
+		}
 	}
 }
 
@@ -619,9 +645,10 @@ func (ne *NetworkEngine) Close() error {
 
 // httpStreamFactory creates HTTP stream processors for TCP reassembly
 type httpStreamFactory struct {
-	engine  *NetworkEngine
-	streams map[string]*httpStream
-	mu      sync.Mutex
+	engine         *NetworkEngine
+	streams        map[string]*httpStream
+	partialStreams map[string]*HTTPStream
+	mu             sync.Mutex
 }
 
 // New creates a new HTTP stream for the given TCP flow
@@ -631,6 +658,10 @@ func (factory *httpStreamFactory) New(net, transport gopacket.Flow) tcpassembly.
 
 	factory.mu.Lock()
 	defer factory.mu.Unlock()
+
+	if factory.partialStreams == nil {
+		factory.partialStreams = make(map[string]*HTTPStream)
+	}
 
 	stream := &httpStream{
 		id:        streamID,
@@ -715,14 +746,19 @@ func (stream *httpStream) ReassemblyComplete() {
 func (stream *httpStream) processHTTPData() {
 	data := stream.data
 
-	// Basic HTTP detection
 	if len(data) < 4 {
 		return
 	}
 
-	// Check if this looks like an HTTP request or response
-	dataStr := string(data[:min(len(data), 1024)]) // Check first 1KB
+	// Route TLS traffic to TLS Analyzer
+	if len(data) >= 3 && data[1] == 0x03 {
+		recordType := data[0]
+		if recordType >= 0x14 && recordType <= 0x17 {
+			return // TLS detected, skip HTTP processing
+		}
+	}
 
+	dataStr := string(data[:min(len(data), 200)])
 	isHTTPRequest := false
 	isHTTPResponse := false
 
@@ -741,7 +777,7 @@ func (stream *httpStream) processHTTPData() {
 	}
 
 	if isHTTPRequest || isHTTPResponse {
-		// Parse client/server info from flow
+		// Extract connection info
 		var clientIP, serverIP net.IP
 		var clientPort, serverPort int
 
@@ -751,7 +787,6 @@ func (stream *httpStream) processHTTPData() {
 		}
 
 		if stream.transport.Src().String() != "" {
-			// Extract ports from transport endpoints
 			srcPortBytes := stream.transport.Src().Raw()
 			dstPortBytes := stream.transport.Dst().Raw()
 
@@ -763,44 +798,53 @@ func (stream *httpStream) processHTTPData() {
 			}
 		}
 
-		// Create HTTP stream with normalized ID and correct request/response assignment
 		normalizedID := normalizeStreamID(stream.net, stream.transport)
 
-		var httpStream *HTTPStream
+		// Get or create partial stream
+		stream.factory.mu.Lock()
+		existingStream := stream.factory.partialStreams[normalizedID]
 
-		if isHTTPRequest {
-			// This is a request - put data in RawRequest
-			httpStream = &HTTPStream{
-				ID:          normalizedID,
-				ClientIP:    clientIP,
-				ServerIP:    serverIP,
-				ClientPort:  clientPort,
-				ServerPort:  serverPort,
-				StartTime:   stream.startTime,
-				EndTime:     stream.endTime,
-				RawRequest:  data,
-				RawResponse: nil,
-				IsComplete:  !stream.endTime.IsZero(),
+		if existingStream == nil {
+			existingStream = &HTTPStream{
+				ID:         normalizedID,
+				ClientIP:   clientIP,
+				ServerIP:   serverIP,
+				ClientPort: clientPort,
+				ServerPort: serverPort,
+				StartTime:  stream.startTime,
+				EndTime:    stream.endTime,
 			}
-		} else if isHTTPResponse {
-			// This is a response - put data in RawResponse
-			httpStream = &HTTPStream{
-				ID:          normalizedID,
-				ClientIP:    clientIP,
-				ServerIP:    serverIP,
-				ClientPort:  clientPort,
-				ServerPort:  serverPort,
-				StartTime:   stream.startTime,
-				EndTime:     stream.endTime,
-				RawRequest:  nil,
-				RawResponse: data,
-				IsComplete:  !stream.endTime.IsZero(),
-			}
+			stream.factory.partialStreams[normalizedID] = existingStream
 		}
 
-		// Call callback if set and stream created
-		if httpStream != nil && stream.factory.engine.httpStreamCallback != nil {
-			stream.factory.engine.httpStreamCallback(httpStream)
+		// Add appropriate data
+		if isHTTPRequest {
+			existingStream.RawRequest = data
+		} else if isHTTPResponse {
+			existingStream.RawResponse = data
+		}
+
+		// Update timing
+		if !stream.endTime.IsZero() {
+			existingStream.EndTime = stream.endTime
+		}
+
+		// Check if complete
+		isComplete := len(existingStream.RawRequest) > 0 && len(existingStream.RawResponse) > 0
+		existingStream.IsComplete = isComplete
+
+		stream.factory.mu.Unlock()
+
+		// Send to callback
+		if stream.factory.engine.httpStreamCallback != nil {
+			stream.factory.engine.httpStreamCallback(existingStream)
+		}
+
+		// Cleanup if complete
+		if isComplete {
+			stream.factory.mu.Lock()
+			delete(stream.factory.partialStreams, normalizedID)
+			stream.factory.mu.Unlock()
 		}
 	}
 }

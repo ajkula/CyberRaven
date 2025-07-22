@@ -8,14 +8,16 @@ import (
 	"time"
 
 	"github.com/ajkula/cyberraven/pkg/config"
+	"github.com/ajkula/cyberraven/pkg/discovery"
 	"github.com/ajkula/cyberraven/pkg/utils"
 )
 
 // TLSTester handles comprehensive TLS/SSL security testing
 type TLSTester struct {
-	config     *config.TLSAttackConfig
-	target     *config.TargetConfig
-	httpClient *utils.HTTPClient
+	config       *config.TLSAttackConfig
+	target       *config.TargetConfig
+	httpClient   *utils.HTTPClient
+	discoveryCtx *discovery.AttackContext
 
 	// Sub-testers for different aspects
 	cipherTester      *CipherTester
@@ -34,7 +36,7 @@ type TLSTester struct {
 }
 
 // NewTLSTester creates a new TLS security tester
-func NewTLSTester(tlsConfig *config.TLSAttackConfig, targetConfig *config.TargetConfig) (*TLSTester, error) {
+func NewTLSTester(tlsConfig *config.TLSAttackConfig, targetConfig *config.TargetConfig, attackContext *discovery.AttackContext) (*TLSTester, error) {
 	// Validate target URL for TLS testing
 	targetURL, err := url.Parse(targetConfig.BaseURL)
 	if err != nil {
@@ -42,7 +44,9 @@ func NewTLSTester(tlsConfig *config.TLSAttackConfig, targetConfig *config.Target
 	}
 
 	if targetURL.Scheme != "https" {
-		return nil, fmt.Errorf("TLS testing requires HTTPS target, got: %s", targetURL.Scheme)
+		if attackContext == nil || attackContext.TLSIntelligence.TotalHandshakes == 0 {
+			return nil, fmt.Errorf("TLS testing requires HTTPS target or TLS intelligence from discovery, got: %s", targetURL.Scheme)
+		}
 	}
 
 	// Create engine config for HTTP client
@@ -61,9 +65,10 @@ func NewTLSTester(tlsConfig *config.TLSAttackConfig, targetConfig *config.Target
 	}
 
 	tester := &TLSTester{
-		config:     tlsConfig,
-		target:     targetConfig,
-		httpClient: httpClient,
+		config:       tlsConfig,
+		target:       targetConfig,
+		httpClient:   httpClient,
+		discoveryCtx: attackContext,
 	}
 
 	// Initialize sub-testers
@@ -137,6 +142,8 @@ func (tt *TLSTester) Execute(ctx context.Context) (*TLSTestResult, error) {
 			return nil, fmt.Errorf("downgrade testing failed: %w", err)
 		}
 	}
+
+	tt.ExploitTLSIntelligence()
 
 	// Collect and aggregate results
 	tt.collectResults(result)

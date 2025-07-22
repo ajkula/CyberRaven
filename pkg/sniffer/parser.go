@@ -710,9 +710,6 @@ func (p *Parser) ParseHTTPStream(stream *HTTPStream) (*HTTPConversation, error) 
 		return nil, fmt.Errorf("stream is nil")
 	}
 
-	fmt.Printf("DEBUG ParseHTTPStream: ID=%s, RawRequest=%d bytes, RawResponse=%d bytes\n",
-		stream.ID, len(stream.RawRequest), len(stream.RawResponse))
-
 	// Get or create conversation
 	conversation := p.getOrCreateConversation(stream)
 
@@ -777,7 +774,6 @@ func (p *Parser) addRequestIfPresent(conversation *HTTPConversation, stream *HTT
 	p.enrichRequestMetadata(request, stream)
 	conversation.Request = request
 
-	fmt.Printf("DEBUG: Added request to conversation: %s %s\n", request.Method, request.Path)
 	return nil
 }
 

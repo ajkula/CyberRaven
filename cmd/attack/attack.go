@@ -4,25 +4,24 @@ import (
 	"fmt"
 
 	"github.com/spf13/cobra"
-	"github.com/spf13/viper"
 )
 
 // Execute runs the attack command with the provided flags
 func Execute(cmd *cobra.Command, args []string) error {
 	// Get command flags
 	outputDir, _ := cmd.Flags().GetString("output")
-	verbose := viper.GetBool("verbose")
-	noColor := viper.GetBool("no-color")
+	verbose, _ := cmd.Root().PersistentFlags().GetBool("verbose")
+	noColor, _ := cmd.Root().PersistentFlags().GetBool("no-color")
 
 	// Load base configuration
-	cfg, err := loadConfig()
+	cfg, err := LoadConfig()
 	if err != nil {
 		return fmt.Errorf("failed to load configuration: %w", err)
 	}
 
 	// Apply CLI target override if provided
 	if targetURL, _ := cmd.Flags().GetString("target"); targetURL != "" {
-		if err := applyTargetOverride(cfg, targetURL); err != nil {
+		if err := ApplyTargetOverride(cfg, targetURL); err != nil {
 			return fmt.Errorf("failed to apply target override: %w", err)
 		}
 		printInfo(fmt.Sprintf("Target override applied: %s", targetURL), false)

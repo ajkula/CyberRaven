@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/ajkula/cyberraven/pkg/config"
+	"github.com/ajkula/cyberraven/pkg/discovery"
 	"github.com/ajkula/cyberraven/pkg/utils"
 )
 
@@ -76,9 +77,10 @@ type AttackResult struct {
 
 // DoSTester handles DoS attack testing
 type DoSTester struct {
-	config     *config.DoSAttackConfig
-	target     *config.TargetConfig
-	httpClient *utils.HTTPClient
+	config       *config.DoSAttackConfig
+	target       *config.TargetConfig
+	httpClient   *utils.HTTPClient
+	discoveryCtx *discovery.AttackContext
 
 	// Test parameters
 	testEndpoints []string
@@ -96,7 +98,7 @@ type DoSTester struct {
 }
 
 // NewDoSTester creates a new DoS security tester
-func NewDoSTester(dosConfig *config.DoSAttackConfig, targetConfig *config.TargetConfig) (*DoSTester, error) {
+func NewDoSTester(dosConfig *config.DoSAttackConfig, targetConfig *config.TargetConfig, attackContext *discovery.AttackContext) (*DoSTester, error) {
 	// Create engine config specifically for DoS testing - VERY controlled
 	engineConfig := &config.EngineConfig{
 		MaxWorkers: dosConfig.MaxConnections, // Use configured max connections
@@ -124,6 +126,7 @@ func NewDoSTester(dosConfig *config.DoSAttackConfig, targetConfig *config.Target
 		config:        dosConfig,
 		target:        targetConfig,
 		httpClient:    httpClient,
+		discoveryCtx:  attackContext,
 		testEndpoints: getDefaultDoSEndpoints(),
 	}, nil
 }
@@ -165,6 +168,8 @@ func (dt *DoSTester) Execute(ctx context.Context) (*DoSTestResult, error) {
 			return nil, fmt.Errorf("connection exhaustion testing failed: %w", err)
 		}
 	}
+
+	dt.ExploitTLSIntelligence()
 
 	// Finalize results
 	dt.mu.RLock()

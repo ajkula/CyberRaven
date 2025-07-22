@@ -102,6 +102,9 @@ cyberraven/
 arborescence du projet exacte et à jour:
 
 .
+│   .gitignore
+│   config.go
+│   cyberraven.exe
 │   cyberraven.yaml
 │   go.mod
 │   go.sum
@@ -129,6 +132,7 @@ arborescence du projet exacte et à jour:
 │   ├───attacks
 │   │   ├───api
 │   │   │       analyzer.go
+│   │   │       config.go
 │   │   │       detector.go
 │   │   │       enumeration.go
 │   │   │       executor.go
@@ -141,13 +145,34 @@ arborescence du projet exacte et à jour:
 │   │   │       flooding.go
 │   │   │
 │   │   ├───hmac
+│   │   │       print.go
 │   │   │       replay.go
+│   │   │       signature.go
+│   │   │       tester.go
+│   │   │       timing.go
+│   │   │       types.go
+│   │   │       utils.go
 │   │   │
 │   │   ├───injection
-│   │   │       sql.go
+│   │   │       config.go
+│   │   │       detection.go
+│   │   │       executor.go
+│   │   │       helpers.go
+│   │   │       payloads.go
+│   │   │       state.go
+│   │   │       tester.go
+│   │   │       types.go
 │   │   │
 │   │   ├───jwt
+│   │   │       analyzer.go
+│   │   │       attacks.go
+│   │   │       config.go
+│   │   │       discovery.go
+│   │   │       executor.go
 │   │   │       fuzzer.go
+│   │   │       print.go
+│   │   │       state.go
+│   │   │       types.go
 │   │   │
 │   │   └───tls
 │   │           certificate.go
@@ -157,7 +182,12 @@ arborescence du projet exacte et à jour:
 │   │           types.go
 │   │
 │   ├───config
+│   │       defaults.go
+│   │       loader.go
 │   │       types.go
+│   │
+│   ├───discovery
+│   │       loader.go
 │   │
 │   ├───reporting
 │   │       exporters.go
@@ -169,6 +199,7 @@ arborescence du projet exacte et à jour:
 │   │       detector.go
 │   │       engine.go
 │   │       parser.go
+│   │       tls_analyzer.go
 │   │       types.go
 │   │
 │   └───utils
@@ -176,4 +207,3 @@ arborescence du projet exacte et à jour:
 │
 ├───reports
 └───results
-

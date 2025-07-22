@@ -2,6 +2,9 @@ package api
 
 import (
 	"time"
+
+	"github.com/ajkula/cyberraven/pkg/discovery"
+	"github.com/ajkula/cyberraven/pkg/utils"
 )
 
 // EnumerationResult represents the result of an API endpoint enumeration test
@@ -27,6 +30,11 @@ type EnumerationResult struct {
 	// Performance metrics
 	RequestsPerSecond float64 `json:"requests_per_second"`
 	SuccessRate       float64 `json:"success_rate"`
+
+	// intelligence
+	IntelligenceUsed   bool     `json:"intelligence_used"`
+	DiscoveredTargets  int      `json:"discovered_targets"`
+	RecommendedModules []string `json:"recommended_modules"`
 }
 
 // EndpointResult represents information about a discovered endpoint
@@ -59,4 +67,53 @@ type VulnerabilityFinding struct {
 	Description string `json:"description"`
 	Evidence    string `json:"evidence"`
 	Remediation string `json:"remediation"`
+}
+
+// VulnerabilityDetector handles intelligent detection of security vulnerabilities
+type VulnerabilityDetector struct {
+	discoveryCtx      *discovery.AttackContext
+	ruleEngine        *RuleEngine
+	contextualAdapter *ContextualAdapter
+	payloadGenerator  *PayloadGenerator
+}
+
+// RuleEngine manages and executes detection rules
+type RuleEngine struct {
+	rules []DetectionRule
+}
+
+// ContextualAdapter adapts detection rules based on discovery intelligence
+type ContextualAdapter struct {
+	discoveryCtx *discovery.AttackContext
+}
+
+// PayloadGenerator generates contextual payloads for testing
+type PayloadGenerator struct {
+	technology discovery.TechnologyInfo
+}
+
+// DetectionRule represents an intelligent vulnerability detection rule
+type DetectionRule struct {
+	ID              string
+	Type            string
+	Severity        string
+	Description     string
+	Remediation     string
+	Context         []string // ["auth", "api", "admin", "jwt", "database"]
+	Technologies    []string // ["mysql", "postgresql", "mongodb", "express", "spring"]
+	Check           func(path, method string, resp *utils.HTTPResponse, ctx *DetectionContext) (bool, string)
+	Payloads        func(ctx *DetectionContext) []string
+	RequiresAuth    bool
+	TimingSensitive bool
+}
+
+// DetectionContext holds context information for vulnerability detection
+type DetectionContext struct {
+	DiscoveryCtx  *discovery.AttackContext
+	Technology    discovery.TechnologyInfo
+	EndpointType  string // "auth", "api", "admin", "resource", "file"
+	HasJWT        bool
+	HasParameters bool
+	DatabaseType  string
+	FrameworkType string
 }

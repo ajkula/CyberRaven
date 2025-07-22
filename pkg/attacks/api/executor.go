@@ -8,6 +8,7 @@ import (
 	"sync"
 
 	"github.com/ajkula/cyberraven/pkg/config"
+	"github.com/ajkula/cyberraven/pkg/discovery"
 	"github.com/ajkula/cyberraven/pkg/utils"
 )
 
@@ -17,11 +18,10 @@ type TestExecutor struct {
 	analyzer   *ResponseAnalyzer
 }
 
-// NewTestExecutor creates a new test executor
-func NewTestExecutor(httpClient *utils.HTTPClient) *TestExecutor {
+func NewTestExecutor(httpClient *utils.HTTPClient, discoveryCtx *discovery.AttackContext) *TestExecutor {
 	return &TestExecutor{
 		httpClient: httpClient,
-		analyzer:   NewResponseAnalyzer(),
+		analyzer:   NewResponseAnalyzer(discoveryCtx),
 	}
 }
 
@@ -162,9 +162,6 @@ func (te *TestExecutor) executeEndpointTest(ctx context.Context, baseURL *url.UR
 	if queryParams != "" {
 		fullURL.RawQuery = queryParams
 	}
-
-	// DEBUG
-	fmt.Printf("[DEBUG] Testing URL: %s\n", fullURL.String())
 
 	// Record that we tested this endpoint
 	resultCollector.IncrementTestedCount()

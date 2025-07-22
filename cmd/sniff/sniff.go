@@ -8,7 +8,7 @@ import (
 	"time"
 
 	"github.com/spf13/cobra"
-	"github.com/spf13/viper"
+	"gopkg.in/yaml.v3"
 
 	"github.com/ajkula/cyberraven/pkg/config"
 	"github.com/ajkula/cyberraven/pkg/sniffer"
@@ -23,6 +23,8 @@ const (
 	ColorBlue   = "\033[34m"
 	ColorCyan   = "\033[36m"
 	ColorBold   = "\033[1m"
+
+	configFile = "cyberraven.yaml"
 )
 
 // Execute runs the network sniffing command
@@ -34,9 +36,8 @@ func Execute(cmd *cobra.Command, args []string) error {
 	outputFile, _ := cmd.Flags().GetString("output")
 
 	// Get global flags
-	verbose := viper.GetBool("verbose")
-	noColor := viper.GetBool("no-color")
-	configFile := viper.GetString("config")
+	verbose, _ := cmd.Root().PersistentFlags().GetBool("verbose")
+	noColor, _ := cmd.Root().PersistentFlags().GetBool("no-color")
 
 	// Load configuration
 	printInfo("Loading CyberRaven configuration...", noColor)
@@ -103,10 +104,20 @@ func Execute(cmd *cobra.Command, args []string) error {
 	// Display results
 	displaySniffingResults(result, verbose, noColor)
 
-	// Save results if output file specified
-	if outputFile != "" {
+	// saving results for better attacks
+	discoveryFile := "discovery.json"
+	if err := saveSniffingResults(result, discoveryFile, noColor); err != nil {
+		printWarning(fmt.Sprintf("Failed to save discovery results: %v", err), noColor)
+	} else {
+		printSuccess("Discovery results saved to discovery.json", noColor)
+	}
+
+	// Save additional copy if output file specified
+	if outputFile != "" && outputFile != discoveryFile {
 		if err := saveSniffingResults(result, outputFile, noColor); err != nil {
-			printError(fmt.Sprintf("Failed to save results: %v", err), noColor)
+			printError(fmt.Sprintf("Failed to save additional copy: %v", err), noColor)
+		} else {
+			printSuccess(fmt.Sprintf("Additional copy saved to: %s", outputFile), noColor)
 		}
 	}
 
@@ -152,7 +163,7 @@ func createSniffingSession(cfg *config.Config, snifferConfig *config.SnifferConf
 	detector := sniffer.NewDetector(snifferConfig)
 
 	// Create configurator
-	configurator := sniffer.NewConfigurator(snifferConfig, &cfg.Target, &cfg.Attacks)
+	configurator := sniffer.NewConfigurator(snifferConfig, cfg.Target, cfg.Attacks)
 
 	session := &SniffingSession{
 		config:        cfg,
@@ -180,23 +191,30 @@ func (s *SniffingSession) Execute(ctx context.Context) (*sniffer.SnifferResult, 
 
 	// Set up HTTP stream callback for real-time processing
 	s.networkEngine.SetHTTPStreamCallback(func(stream *sniffer.HTTPStream) {
+		fmt.Printf("[DEBUG] Processing HTTP stream: %s\n", stream.ID)
+
 		// Parse HTTP conversation
 		conversation, err := s.parser.ParseHTTPStream(stream)
 		if err != nil {
+			fmt.Printf("[ERROR] Parser failed: %v\n", err)
 			return // Skip invalid conversations
 		}
+		fmt.Printf("[DEBUG] Parsed conversation: %s %s\n", conversation.Request.Method, conversation.Request.Path)
 
 		// Analyze conversation
 		analysisResults, err := s.analyzer.AnalyzeConversation(conversation)
 		if err != nil {
+			fmt.Printf("[ERROR] Analyzer failed: %v\n", err)
 			return // Skip analysis errors
 		}
 
 		// Detect security patterns
 		detectionResults, err := s.detector.ProcessConversation(conversation)
 		if err != nil {
+			fmt.Printf("[ERROR] Detector failed: %v\n", err)
 			return // Skip detection errors
 		}
+		fmt.Printf("[DEBUG] Detection results: %d findings\n", len(detectionResults.Endpoints))
 
 		// Update configurator with discoveries
 		s.configurator.ProcessDiscoveries(detectionResults, analysisResults)
@@ -236,6 +254,7 @@ func (s *SniffingSession) Execute(ctx context.Context) (*sniffer.SnifferResult, 
 	result.DiscoveredSignatures = s.detector.GetDiscoveredSignatures()
 	result.SensitiveDataLeaks = s.detector.GetSensitiveDataLeaks()
 	result.TechnologyProfile = s.analyzer.GetTechnologyProfile()
+	result.TLSIntelligence = s.networkEngine.GetTLSIntelligence()
 
 	return result, nil
 }
@@ -258,15 +277,15 @@ func loadConfiguration(configFile string) (*config.Config, error) {
 		return nil, fmt.Errorf("configuration file not found: %s", configFile)
 	}
 
-	// Load configuration using viper
-	viper.SetConfigFile(configFile)
-	if err := viper.ReadInConfig(); err != nil {
+	// Read config file directly
+	yamlData, err := os.ReadFile(configFile)
+	if err != nil {
 		return nil, fmt.Errorf("failed to read config file: %w", err)
 	}
 
 	// Unmarshal into config struct
 	var cfg config.Config
-	if err := viper.Unmarshal(&cfg); err != nil {
+	if err := yaml.Unmarshal(yamlData, &cfg); err != nil {
 		return nil, fmt.Errorf("failed to unmarshal config: %w", err)
 	}
 
@@ -430,11 +449,12 @@ func printSniffingSummary(result *sniffer.SnifferResult, noColor bool) {
 
 	if len(result.AttackRecommendations) > 0 {
 		printSuccess("Traffic analysis complete! Attack recommendations generated.", noColor)
-		printInfo("Configuration file updated with discovered targets and tokens", noColor)
-		printInfo("Run 'cyberraven attack' to start penetration testing", noColor)
+		printInfo("Discovery results saved to discovery.json for intelligent attack targeting", noColor)
+		printInfo("Run 'cyberraven attack' to execute targeted penetration testing", noColor)
 	} else {
-		printInfo("Traffic analysis complete - no immediate security concerns detected", noColor)
-		printInfo("Consider running standard penetration tests with 'cyberraven attack'", noColor)
+		printInfo("Traffic analysis complete - baseline established", noColor)
+		printInfo("Discovery results saved to discovery.json", noColor)
+		printInfo("Run 'cyberraven attack' for standard penetration tests", noColor)
 	}
 }
 

@@ -1,0 +1,9 @@
+*.exe
+reports/
+backups/
+results/
+discovery.json
+*.zip
+cyberraven.yaml
+idea.md
+result.json

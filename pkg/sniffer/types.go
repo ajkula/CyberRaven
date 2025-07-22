@@ -34,6 +34,7 @@ type SnifferResult struct {
 	// Security findings
 	SecurityFindings   []SecurityFinding   `json:"security_findings"`
 	SensitiveDataLeaks []SensitiveDataLeak `json:"sensitive_data_leaks"`
+	TLSIntelligence    TLSIntelligence     `json:"tls_intelligence"`
 
 	// Configuration updates
 	ConfigUpdates         ConfigurationUpdates   `json:"config_updates"`

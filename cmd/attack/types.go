@@ -10,6 +10,7 @@ import (
 	"github.com/ajkula/cyberraven/pkg/attacks/jwt"
 	"github.com/ajkula/cyberraven/pkg/attacks/tls"
 	"github.com/ajkula/cyberraven/pkg/config"
+	"github.com/ajkula/cyberraven/pkg/discovery"
 )
 
 // Colors for terminal output
@@ -57,20 +58,28 @@ type AttackResult struct {
 
 // AttackOrchestrator manages the execution of multiple attack modules
 type AttackOrchestrator struct {
-	config    *config.Config
-	target    *config.TargetConfig
-	verbose   bool
-	noColor   bool
-	outputDir string
+	config        *config.Config
+	target        *config.TargetConfig
+	attackContext *discovery.AttackContext
+	verbose       bool
+	noColor       bool
+	outputDir     string
 }
 
 // NewAttackOrchestrator creates a new attack orchestrator
 func NewAttackOrchestrator(cfg *config.Config, verbose, noColor bool, outputDir string) *AttackOrchestrator {
+	loader := discovery.NewDiscoveryLoader()
+	attackContext, err := loader.LoadAttackContext()
+	if err != nil {
+		attackContext = nil
+	}
+
 	return &AttackOrchestrator{
-		config:    cfg,
-		target:    &cfg.Target,
-		verbose:   verbose,
-		noColor:   noColor,
-		outputDir: outputDir,
+		config:        cfg,
+		target:        cfg.Target,
+		attackContext: attackContext,
+		verbose:       verbose,
+		noColor:       noColor,
+		outputDir:     outputDir,
 	}
 }

@@ -1,6 +1,7 @@
 package api
 
 import (
+	"github.com/ajkula/cyberraven/pkg/discovery"
 	"github.com/ajkula/cyberraven/pkg/utils"
 )
 
@@ -9,10 +10,9 @@ type ResponseAnalyzer struct {
 	detector *VulnerabilityDetector
 }
 
-// NewResponseAnalyzer creates a new response analyzer
-func NewResponseAnalyzer() *ResponseAnalyzer {
+func NewResponseAnalyzer(discoveryCtx *discovery.AttackContext) *ResponseAnalyzer {
 	return &ResponseAnalyzer{
-		detector: NewVulnerabilityDetector(),
+		detector: NewVulnerabilityDetector(discoveryCtx),
 	}
 }
 

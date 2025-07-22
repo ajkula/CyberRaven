@@ -3,13 +3,13 @@ engine:
     timeout: 30s
     rate_limit: 10
     enable_sniffing: false
-    enable_attacks: false
+    enable_attacks: true
     max_retries: 3
     retry_delay: 1s
 target:
-    name: My Target Application
+    name: Default Target
     description: Target system for security assessment
-    base_url: https://localhost:8080/ui/
+    base_url: http://localhost:8080
     headers: {}
     auth:
         type: none
@@ -31,7 +31,7 @@ target:
         min_version: ""
         max_version: ""
         cipher_suites: []
-    profile: ""
+    profile: webapp-generic
 attacks:
     enabled: []
     disabled: []
@@ -41,7 +41,72 @@ attacks:
         test_alg_none: true
         test_alg_confusion: true
         test_weak_secrets: true
-        weak_secrets: []
+        weak_secrets:
+            - secret
+            - secretkey
+            - secret123
+            - mysecret
+            - jwt_secret
+            - your-256-bit-secret
+            - your-secret-key
+            - mySecretKey
+            - jsonwebtoken
+            - jwt-key
+            - token-secret
+            - "123456"
+            - password
+            - "123456789"
+            - "12345678"
+            - "12345"
+            - "1234567"
+            - qwerty
+            - abc123
+            - password123
+            - admin
+            - letmein
+            - welcome
+            - monkey
+            - dragon
+            - master
+            - defaultsecret
+            - default
+            - changeme
+            - temp
+            - test
+            - demo
+            - example
+            - sample
+            - placeholder
+            - dummy
+            - rails_secret
+            - django_secret
+            - flask_secret
+            - express_secret
+            - spring_secret
+            - laravel_secret
+            - symfony_secret
+            - a
+            - "1"
+            - x
+            - key
+            - dev
+            - prod
+            - staging
+            - "null"
+            - undefined
+            - ""
+            - ' '
+            - c2VjcmV0
+            - cGFzc3dvcmQ=
+            - MTIzNDU2
+            - deadbeef
+            - cafebabe
+            - 1234567890abcdef
+            - company
+            - app
+            - api
+            - service
+            - backend
         test_expiration: true
     hmac:
         enable: true
@@ -51,11 +116,112 @@ attacks:
         timing_requests: 50
     api:
         enable: true
-        enable_auto_discovery: false
+        enable_auto_discovery: true
         test_enumeration: true
         test_method_tampering: true
         test_parameter_pollution: true
-        common_endpoints: []
+        common_endpoints:
+            - /api/auth
+            - /api/auth/login
+            - /api/auth/register
+            - /rest/user/login
+            - /rest/user/register
+            - /auth
+            - /authentication
+            - /login
+            - /logout
+            - /tokens
+            - /sessions
+            - /signin
+            - /signup
+            - /register
+            - /api
+            - /graphql
+            - /health
+            - /healthcheck
+            - /info
+            - /version
+            - /docs
+            - /documentation
+            - /swagger
+            - /openapi
+            - /api-docs
+            - /redoc
+            - /reports
+            - /api/users
+            - /api/user
+            - /users
+            - /user
+            - /accounts
+            - /account
+            - /profile
+            - /preferences
+            - /api/admin
+            - /rest/admin/application-configuration
+            - /admin
+            - /management
+            - /dashboard
+            - /administrator
+            - /control
+            - /panel
+            - /api/Products
+            - /api/products
+            - /products
+            - /api/Quantitys
+            - /api/orders
+            - /orders
+            - /rest/products/search
+            - /api/search
+            - /search
+            - /query
+            - /filter
+            - /config
+            - /configuration
+            - /settings
+            - /assets
+            - /api/files
+            - /upload
+            - /download
+            - /files
+            - /metrics
+            - /stats
+            - /statistics
+            - /debug
+            - /test
+            - /dev
+            - /console
+            - /shell
+            - /terminal
+            - /messages
+            - /message
+            - /chat
+            - /channels
+            - /notifications
+            - /alerts
+            - /broadcast
+            - /contacts
+            - /groups
+            - /teams
+            - /presence
+            - /status
+            - /activity
+            - /media
+            - /attachments
+            - /stream
+            - /moderation
+            - /logs
+            - /events
+            - /audit
+            - /export
+            - /import
+            - /backup
+            - /schema
+            - /metadata
+            - /endpoints
+            - /rest/chatbot/status
+            - /api/support
+            - /rest/deluxe-membership
+            - /rest/2fa/status
         wordlists: []
     injection:
         enable: true
@@ -103,13 +269,13 @@ output:
     colors: true
     progress_bars: true
     interactive: false
-    real_time: true
+    real_time: false
     show_banner: true
 logging:
     level: info
     format: text
     output_file: ""
     rotation: false
-    max_size: 100
+    max_size: 10
     max_backups: 3
-    max_age: 28
+    max_age: 30
