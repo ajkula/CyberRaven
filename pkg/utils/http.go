@@ -138,6 +138,11 @@ func (hc *HTTPClient) Options(ctx context.Context, url string) (*HTTPResponse, e
 	return hc.Do(ctx, "OPTIONS", url, nil, nil)
 }
 
+// Patch performs an enhanced HTTP PATCH request
+func (hc *HTTPClient) Patch(ctx context.Context, url string, body io.Reader, headers map[string]string) (*HTTPResponse, error) {
+	return hc.Do(ctx, "PATCH", url, body, headers)
+}
+
 // Do performs an enhanced HTTP request with retry logic and analysis
 func (hc *HTTPClient) Do(ctx context.Context, method, url string, body io.Reader, headers map[string]string) (*HTTPResponse, error) {
 	// Acquire rate limit slot

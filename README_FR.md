@@ -1,6 +1,8 @@
 # CyberRaven
 
-**Outil de test d'intrusion automatisé en ligne de commande.**
+[![English](https://img.shields.io/badge/lang-English-blue)](README.md)
+
+**Outil professionnel de test d'intrusion en ligne de commande.**
 
 CyberRaven est un framework de pen-testing modulaire écrit en Go. Il adopte une approche **Sniffer-First** : capturer le trafic réseau pour découvrir automatiquement les cibles, puis configurer et exécuter les tests de sécurité de manière ciblée.
 
@@ -9,7 +11,7 @@ CyberRaven est un framework de pen-testing modulaire écrit en Go. Il adopte une
   / __|_   _| |__  ___ _ __|  _ \ __ ___ _____ _ _
  | |  | | | | '_ \/ -_) '__| |_) / _` \ V / -_) ' \
  | |__ \__, |_.__/\___|_|  |_|_|_\__,_|\_/\___|_||_|
-  \___||___/                                   v1.0.0
+  \___||___/                                  v1.0.0
 ```
 
 ---
@@ -52,7 +54,43 @@ Le tout est injecté automatiquement dans ta configuration pour alimenter les at
 | **Injection** | Paramètres vulnérables | SQL, NoSQL, JSON, path traversal |
 | **HMAC** | Authentification par signature | Replay attacks, timing side-channels, bypass de signature |
 | **DoS** | Disponibilité du service | Flooding, large payloads, épuisement de connexions |
-| **TLS** | Sécurité transport | Cipher suites, certificats, downgrade attacks |
+| **TLS** | Sécurité transport | Cipher suites, certificats, downgrade attacks, exploitation |
+
+### Mode Kill Chain — Chaîne d'attaque progressive
+
+CyberRaven dispose d'un mode **Kill Chain** qui simule une progression d'attaque réelle :
+
+```
+┌─────────────────┐
+│ Phase 1: TLS    │  ← Tentative de casser la protection TLS
+│   Exploitation  │
+└────────┬────────┘
+         │
+    ┌────┴────┐
+    │ Succès? │
+    └────┬────┘
+    NON  │   OUI
+    ▼    │    ▼
+┌───────┐│┌──────────────────┐
+│Rapport│││ Phase 2: Attaques│  ← Attaque via canal compromis
+│"TLS   │││   Applicatives   │
+│Secure"│││  (JWT, API, etc) │
+└───────┘│└────────┬─────────┘
+         │         ▼
+         │  ┌─────────────────┐
+         │  │ Phase 3: Escalade│  ← Tentatives d'escalade
+         │  └─────────────────┘
+         ▼
+   ┌───────────┐
+   │  RAPPORT  │  ← Progression documentée
+   └───────────┘
+```
+
+**Fonctionnalités clés :**
+- **Exécution conditionnelle** — Les attaques applicatives ne s'exécutent que si TLS est compromis
+- **Exploitation réelle** — Tentatives de downgrade protocole, exploitation de ciphers faibles, attaques sur certificats
+- **Capacité MITM** — Proxy intégré pour l'interception du trafic quand TLS est cassé
+- **Reporting professionnel** — Documente chaque phase avec preuves et raisonnement
 
 ### Report — Des rapports qui parlent
 
@@ -71,7 +109,7 @@ Chaque rapport inclut : synthèse, vulnérabilités détaillées, preuves, recom
 
 ### Prérequis
 
-- **Go 1.24+**
+- **Go 1.21+**
 - **libpcap** (pour le sniffing réseau)
   - Linux : `sudo apt install libpcap-dev`
   - macOS : `brew install libpcap`
@@ -81,7 +119,7 @@ Chaque rapport inclut : synthèse, vulnérabilités détaillées, preuves, recom
 
 ```bash
 # Cloner le repo
-git clone https://github.com/ton-repo/cyberraven.git
+git clone https://github.com/ajkula/cyberraven.git
 cd cyberraven
 
 # Build standard
@@ -118,7 +156,11 @@ Le sniffer met à jour automatiquement `cyberraven.yaml` avec les découvertes.
 ### 3. Lancer les attaques
 
 ```bash
+# Mode traditionnel - tous les modules séquentiellement
 cyberraven attack --verbose
+
+# Mode Kill Chain - attaques progressives conditionnelles
+cyberraven attack --kill-chain --verbose
 ```
 
 Les résultats sont stockés dans `./results/`.
@@ -183,14 +225,18 @@ cyberraven attack [OPTIONS]
 | `--target` | `-t` | URL cible (override) | Config YAML |
 | `--modules` | `-m` | Modules spécifiques | Tous activés |
 | `--aggressive` | `-a` | Mode agressif | `false` |
+| `--kill-chain` | `-k` | Mode kill chain | `false` |
 | `--output` | `-o` | Dossier de résultats | `./results` |
 | `--verbose` | `-v` | Mode verbeux | `false` |
 
 **Exemples :**
 
 ```bash
-# Tous les modules activés
+# Tous les modules activés (mode traditionnel)
 cyberraven attack
+
+# Mode Kill Chain - TLS d'abord, puis attaques app si compromis
+cyberraven attack --kill-chain --verbose
 
 # Modules spécifiques
 cyberraven attack --modules jwt,api,injection
@@ -200,6 +246,9 @@ cyberraven attack --target https://api.example.com
 
 # Mode agressif (plus de payloads, moins de délai)
 cyberraven attack --aggressive --verbose
+
+# Kill chain contre une cible spécifique
+cyberraven attack --kill-chain --target https://legacy.example.com
 ```
 
 ### Commande `report`
@@ -242,6 +291,66 @@ Disponibles sur toutes les commandes :
 | `--quiet` | `-q` | Erreurs uniquement |
 | `--no-color` | | Désactive les couleurs |
 | `--no-banner` | | Désactive la bannière ASCII |
+
+---
+
+## Mode Kill Chain
+
+Le mode Kill Chain (`--kill-chain` ou `-k`) implémente une progression d'attaque professionnelle qui reflète la méthodologie réelle de test d'intrusion.
+
+### Comment ça fonctionne
+
+1. **Phase 1 : Exploitation TLS**
+   - Analyse la configuration TLS pour détecter les faiblesses
+   - Tente le downgrade de protocole (SSL3, TLS 1.0)
+   - Teste l'exploitation de ciphers faibles (RC4, DES, Export)
+   - Vérifie les vulnérabilités de certificats (auto-signé, expiré, clés faibles)
+   - Tente l'exploitation de la renégociation non sécurisée
+
+2. **Phase 2 : Attaques Applicatives** (uniquement si TLS compromis)
+   - Route les attaques via le canal TLS compromis
+   - Exécute : énumération API, test JWT, test injection, test HMAC, test DoS
+   - Tout le trafic bénéficie de l'interception TLS
+
+3. **Phase 3 : Escalade** (uniquement si vulnérabilités trouvées)
+   - Analyse les vulnérabilités découvertes pour les chemins d'escalade
+   - Identifie les opportunités d'escalade de privilèges
+   - Cartographie les possibilités de mouvement latéral
+   - Documente les risques d'exfiltration de données
+
+### Quand utiliser le mode Kill Chain
+
+- **Tests d'intrusion professionnels** — Démontre une vraie progression d'attaque
+- **Évaluations de sécurité** — Montre l'exploitabilité réelle, pas juste la détection
+- **Audits de conformité** — Prouve l'efficacité de la protection TLS
+- **Exercices Red Team** — Simule le comportement d'un adversaire
+
+### Exemple de sortie
+
+```
+╔══════════════════════════════════════════════════════════════╗
+║          CYBERRAVEN - KILL CHAIN ATTACK MODE                 ║
+╠══════════════════════════════════════════════════════════════╣
+║  Phase 1: TLS Exploitation   → Casser la protection TLS      ║
+║  Phase 2: App Attacks        → Attaque via canal compromis   ║
+║  Phase 3: Escalation         → Tentatives d'escalade         ║
+╚══════════════════════════════════════════════════════════════╝
+
+┌────────────────────────────────────────────────────────────────┐
+│ PHASE: tls_exploitation                                        │
+│ Tentative d'exploitation TLS                                   │
+└────────────────────────────────────────────────────────────────┘
+  [*] Analyse TLS et tentative d'exploitation...
+  [+] TLS Secure - Aucune faiblesse exploitable
+
+╔══════════════════════════════════════════════════════════════╗
+║                    KILL CHAIN COMPLETE                       ║
+╠══════════════════════════════════════════════════════════════╣
+║  TLS Status: SECURE                                          ║
+║  Progression: Phase 1 uniquement - TLS sécurisé              ║
+║  Phase finale: tls_exploitation                              ║
+╚══════════════════════════════════════════════════════════════╝
+```
 
 ---
 
@@ -334,7 +443,23 @@ reports:
 
 ## Workflow typique
 
-### Scénario 1 : Audit d'une API inconnue
+### Scénario 1 : Évaluation Kill Chain complète
+
+```bash
+# 1. Initialiser
+cyberraven --init-config
+
+# 2. Capturer le trafic (optionnel, pour la découverte)
+sudo cyberraven sniff --duration 5m --verbose
+
+# 3. Attaque Kill Chain
+cyberraven attack --kill-chain --target https://api.example.com --verbose
+
+# 4. Générer le rapport
+cyberraven report --input ./results --format html,json
+```
+
+### Scénario 2 : Audit d'une API inconnue
 
 ```bash
 # 1. Générer le trafic en utilisant l'app normalement
@@ -356,7 +481,7 @@ cyberraven attack --verbose
 cyberraven report --input ./results --format html,json
 ```
 
-### Scénario 2 : Test ciblé JWT
+### Scénario 3 : Test ciblé JWT
 
 ```bash
 # Config minimale dans cyberraven.yaml
@@ -365,7 +490,7 @@ cyberraven report --input ./results --format html,json
 cyberraven attack --modules jwt --verbose
 ```
 
-### Scénario 3 : Scan rapide d'énumération
+### Scénario 4 : Scan rapide d'énumération
 
 ```bash
 cyberraven attack --modules api --target https://api.example.com
@@ -378,12 +503,14 @@ cyberraven attack --modules api --target https://api.example.com
 ```
 cyberraven/
 ├── main.go                 # Point d'entrée CLI
-├── config.go               # Types de configuration
 ├── cyberraven.yaml         # Configuration par défaut
 │
 ├── cmd/                    # Commandes CLI
 │   ├── sniff/              # Module sniffing
-│   ├── attack/             # Module attaque
+│   ├── attack/             # Orchestrateur d'attaque & kill chain
+│   │   ├── attack.go       # Handler CLI
+│   │   ├── orchestrator.go # Orchestration attaque & kill chain
+│   │   └── types.go        # Types kill chain
 │   └── report/             # Module rapport
 │
 ├── pkg/                    # Packages métier
@@ -394,13 +521,21 @@ cyberraven/
 │   │   ├── injection/      # Injections SQL/NoSQL/etc
 │   │   ├── hmac/           # Tests HMAC
 │   │   ├── dos/            # Tests DoS
-│   │   └── tls/            # Tests TLS
+│   │   └── tls/            # Tests TLS & exploitation
+│   │       ├── tls.go      # Testeur TLS principal
+│   │       ├── exploiter.go# Moteur d'exploitation TLS
+│   │       └── downgrade.go# Attaques downgrade
+│   ├── proxy/              # Proxy MITM pour interception TLS
+│   │   ├── mitm.go         # Implémentation proxy MITM
+│   │   └── certgen.go      # Génération dynamique de certificats
+│   ├── discovery/          # Intelligence de découverte
 │   ├── reporting/          # Générateur de rapports
+│   ├── config/             # Gestion de configuration
 │   └── utils/              # Utilitaires
 │
 ├── results/                # Résultats des attaques
 ├── reports/                # Rapports générés
-└── texts/                  # Documentation additionnelle
+└── discovery.json          # Découvertes du sniffer
 ```
 
 ---

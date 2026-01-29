@@ -264,6 +264,8 @@ func (te *TestExecutor) executeHTTPRequest(ctx context.Context, url, method stri
 		return te.httpClient.Head(ctx, url)
 	case "OPTIONS":
 		return te.httpClient.Options(ctx, url)
+	case "PATCH":
+		return te.httpClient.Patch(ctx, url, nil, nil)
 	default:
 		return nil, fmt.Errorf("unsupported HTTP method: %s", method)
 	}

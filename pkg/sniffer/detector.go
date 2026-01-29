@@ -3,7 +3,8 @@
 package sniffer
 
 import (
-	"fmt"
+	"regexp"
+	"strings"
 
 	"github.com/ajkula/cyberraven/pkg/config"
 )
@@ -253,15 +254,6 @@ func (d *Detector) detectSignaturesInRequest(request *HTTPRequest) []DiscoveredS
 }
 
 func (d *Detector) detectEndpointFromRequest(request *HTTPRequest, response *HTTPResponse) *DiscoveredEndpoint {
-	// Debug: Log what we receive
-	fmt.Printf("DEBUG detectEndpoint: Request=%t, Response=%t\n", request != nil, response != nil)
-	if request != nil {
-		fmt.Printf("DEBUG detectEndpoint: Method=%s, Path=%s\n", request.Method, request.Path)
-	}
-	if response != nil {
-		fmt.Printf("DEBUG detectEndpoint: StatusCode=%d\n", response.StatusCode)
-	}
-
 	endpoint := &DiscoveredEndpoint{
 		Method:       request.Method,
 		Path:         request.Path,
@@ -277,11 +269,6 @@ func (d *Detector) detectEndpointFromRequest(request *HTTPRequest, response *HTT
 		endpoint.StatusCodes = []int{response.StatusCode}
 		endpoint.AuthRequired = d.detectAuthRequirement(request, response)
 		endpoint.CSRFProtected = d.detectCSRFProtection(request, response)
-
-		// Debug: Confirm status codes are set
-		fmt.Printf("DEBUG detectEndpoint: Set StatusCodes=%v\n", endpoint.StatusCodes)
-	} else {
-		fmt.Printf("DEBUG detectEndpoint: No response - StatusCodes will be null\n")
 	}
 
 	return endpoint
@@ -537,8 +524,11 @@ func (d *Detector) detectTokenFormat(token string) string {
 }
 
 func (d *Detector) validateJWT(token string) bool {
-	parts := len(token) > 0 && len(splitString(token, ".")) == 3
-	return parts
+	if len(token) == 0 {
+		return false
+	}
+	parts := strings.Split(token, ".")
+	return len(parts) == 3
 }
 
 func (d *Detector) detectSignatureAlgorithm(signature string) string {
@@ -602,32 +592,35 @@ func (d *Detector) getSeverityForDataType(dataType string) string {
 }
 
 func (d *Detector) findMatches(text, pattern string) []string {
-	// Simplified pattern matching - in real implementation would use regexp
 	matches := make([]string, 0)
-	// Basic implementation - would need proper regex
-	return matches
+	re, err := regexp.Compile(pattern)
+	if err != nil {
+		return matches
+	}
+	return re.FindAllString(text, -1)
 }
 
 // Simple utility functions
 func splitString(s, sep string) []string {
-	// Simplified split - would use strings.Split in real implementation
-	return []string{s} // Placeholder
+	return strings.Split(s, sep)
 }
 
 func isNumeric(s string) bool {
+	if len(s) == 0 {
+		return false
+	}
 	for _, char := range s {
 		if char < '0' || char > '9' {
 			return false
 		}
 	}
-	return len(s) > 0
+	return true
 }
 
 func isEmail(s string) bool {
-	return len(s) > 5 && containsString(s, "@") && containsString(s, ".")
+	return len(s) > 5 && strings.Contains(s, "@") && strings.Contains(s, ".")
 }
 
 func containsString(s, substr string) bool {
-	// Simplified contains - would use strings.Contains in real implementation
-	return len(s) >= len(substr) // Placeholder
+	return strings.Contains(strings.ToLower(s), strings.ToLower(substr))
 }

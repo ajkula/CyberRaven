@@ -49,22 +49,57 @@ func Execute(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("configuration validation failed: %w", err)
 	}
 
-	// Create and execute orchestrator
+	// Create orchestrator
 	orchestrator := NewAttackOrchestrator(cfg, verbose, noColor, outputDir)
 
-	// Execute attacks
-	result, err := orchestrator.ExecuteAttacks(cmd.Context())
-	if err != nil {
-		return fmt.Errorf("attack execution failed: %w", err)
-	}
+	// Check for kill chain mode
+	killChainMode, _ := cmd.Flags().GetBool("kill-chain")
 
-	// Save results
-	if err := orchestrator.SaveResults(result); err != nil {
-		printWarning(fmt.Sprintf("Failed to save results: %v", err), noColor)
-	}
+	if killChainMode {
+		// Execute kill chain mode - Progressive conditional attacks
+		printInfo("Kill Chain mode enabled - Progressive attack chain", noColor)
 
-	// Display summary
-	orchestrator.calculateSummaryStats(result)
+		kcResult, err := orchestrator.ExecuteKillChain(cmd.Context())
+		if err != nil {
+			return fmt.Errorf("kill chain execution failed: %w", err)
+		}
+
+		// Save kill chain results
+		if err := orchestrator.SaveKillChainResults(kcResult); err != nil {
+			printWarning(fmt.Sprintf("Failed to save kill chain results: %v", err), noColor)
+		}
+
+		// Display kill chain summary
+		displayKillChainSummary(kcResult, noColor)
+	} else {
+		// Execute traditional attack mode
+		result, err := orchestrator.ExecuteAttacks(cmd.Context())
+		if err != nil {
+			return fmt.Errorf("attack execution failed: %w", err)
+		}
+
+		// Save results
+		if err := orchestrator.SaveResults(result); err != nil {
+			printWarning(fmt.Sprintf("Failed to save results: %v", err), noColor)
+		}
+
+		// Display summary
+		orchestrator.calculateSummaryStats(result)
+	}
 
 	return nil
+}
+
+// displayKillChainSummary affiche le résumé du kill chain
+func displayKillChainSummary(result *KillChainResult, noColor bool) {
+	fmt.Println()
+	printSuccess("Kill Chain Complete", noColor)
+	fmt.Printf("  Session ID: %s\n", result.SessionID)
+	fmt.Printf("  Duration: %s\n", result.Duration)
+	fmt.Printf("  TLS Status: %s\n", result.TLSStatus)
+	fmt.Printf("  Progression: %s\n", result.Progression)
+	fmt.Printf("  Total Vulnerabilities: %d\n", result.TotalVulnerabilities)
+	fmt.Printf("    Critical: %d | High: %d | Medium: %d | Low: %d\n",
+		result.CriticalCount, result.HighCount, result.MediumCount, result.LowCount)
+	fmt.Println()
 }

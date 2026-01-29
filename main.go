@@ -302,6 +302,8 @@ func setupCommands() {
 		"enable aggressive testing mode")
 	attackCmd.Flags().StringP("output", "o", "./results",
 		"output directory for results")
+	attackCmd.Flags().BoolP("kill-chain", "k", false,
+		"enable kill chain mode - progressive conditional attack chain (TLS first, then app attacks if compromised)")
 
 	// Report command specific flags
 	reportCmd.Flags().StringP("input", "i", "./results",

@@ -439,3 +439,316 @@ func min(a, b int) int {
 	}
 	return b
 }
+
+// ============================================================
+// KILL CHAIN REPORT TYPES AND METHODS
+// ============================================================
+
+// KillChainReportData represents data for kill chain report generation
+type KillChainReportData struct {
+	// Meta information
+	GeneratedAt       time.Time `json:"generated_at"`
+	CyberRavenVersion string    `json:"cyberraven_version"`
+
+	// Kill Chain specific
+	SessionID          string             `json:"session_id"`
+	TLSStatus          string             `json:"tls_status"` // "compromised" | "secure"
+	Progression        string             `json:"progression"` // Description of how far the chain went
+	CompromiseMethod   string             `json:"compromise_method,omitempty"`
+
+	// Phases
+	Phases             []PhaseReportData  `json:"phases"`
+
+	// Summary
+	ExecutiveSummary   KillChainSummary   `json:"executive_summary"`
+
+	// Recommendations
+	Recommendations    []Recommendation   `json:"recommendations"`
+}
+
+// PhaseReportData represents a single phase in the kill chain report
+type PhaseReportData struct {
+	Name          string    `json:"name"`
+	Status        string    `json:"status"`
+	Duration      string    `json:"duration"`
+	StartTime     time.Time `json:"start_time"`
+	EndTime       time.Time `json:"end_time"`
+	Findings      []FindingReportData `json:"findings"`
+	VulnCount     int       `json:"vulnerability_count"`
+	NextStep      string    `json:"next_step"` // Why we continue or stop
+	Compromised   bool      `json:"compromised"`
+}
+
+// FindingReportData represents a single finding in the report
+type FindingReportData struct {
+	Type        string `json:"type"`
+	Severity    string `json:"severity"`
+	Title       string `json:"title"`
+	Description string `json:"description"`
+	Evidence    string `json:"evidence"`
+	Remediation string `json:"remediation"`
+	RiskScore   int    `json:"risk_score"`
+}
+
+// KillChainSummary provides executive summary for kill chain results
+type KillChainSummary struct {
+	OverallRiskLevel      string  `json:"overall_risk_level"`
+	TLSSecurityStatus     string  `json:"tls_security_status"`
+	AttackChainCompleted  bool    `json:"attack_chain_completed"`
+	TotalPhasesExecuted   int     `json:"total_phases_executed"`
+	TotalVulnerabilities  int     `json:"total_vulnerabilities"`
+	CriticalCount         int     `json:"critical_count"`
+	HighCount             int     `json:"high_count"`
+	MediumCount           int     `json:"medium_count"`
+	LowCount              int     `json:"low_count"`
+	SecurityScore         int     `json:"security_score"` // 0-100
+	RecommendedActions    int     `json:"recommended_actions"`
+}
+
+// GenerateKillChainReport creates a report from kill chain results
+func (rg *ReportGenerator) GenerateKillChainReport(kcResult *attack.KillChainResult) (*KillChainReportData, error) {
+	reportData := &KillChainReportData{
+		GeneratedAt:       time.Now(),
+		CyberRavenVersion: "1.0.0",
+		SessionID:         kcResult.SessionID,
+		TLSStatus:         kcResult.TLSStatus,
+		Progression:       kcResult.Progression,
+		CompromiseMethod:  kcResult.CompromiseMethod,
+		Phases:            make([]PhaseReportData, 0),
+	}
+
+	// Convert phases
+	for _, phase := range kcResult.Phases {
+		phaseReport := PhaseReportData{
+			Name:        string(phase.Phase),
+			Status:      string(phase.Status),
+			Duration:    phase.Duration.String(),
+			StartTime:   phase.StartTime,
+			EndTime:     phase.EndTime,
+			VulnCount:   phase.VulnCount,
+			Compromised: phase.Compromised,
+			Findings:    make([]FindingReportData, 0),
+		}
+
+		// Determine next step explanation
+		if phase.CanContinue {
+			phaseReport.NextStep = fmt.Sprintf("Continuing to phase: %s", phase.NextPhase)
+		} else if phase.SkipReason != "" {
+			phaseReport.NextStep = fmt.Sprintf("Stopped: %s", phase.SkipReason)
+		} else {
+			phaseReport.NextStep = "Phase completed - no further action"
+		}
+
+		// Convert findings
+		for _, finding := range phase.Findings {
+			phaseReport.Findings = append(phaseReport.Findings, FindingReportData{
+				Type:        finding.Type,
+				Severity:    finding.Severity,
+				Title:       finding.Title,
+				Description: finding.Description,
+				Evidence:    finding.Evidence,
+				Remediation: finding.Remediation,
+				RiskScore:   rg.calculateFindingRiskScore(finding.Severity, finding.Type),
+			})
+		}
+
+		reportData.Phases = append(reportData.Phases, phaseReport)
+	}
+
+	// Generate executive summary
+	reportData.ExecutiveSummary = rg.generateKillChainSummary(kcResult)
+
+	// Generate recommendations
+	reportData.Recommendations = rg.generateKillChainRecommendations(kcResult)
+
+	return reportData, nil
+}
+
+// generateKillChainSummary creates the executive summary for kill chain report
+func (rg *ReportGenerator) generateKillChainSummary(result *attack.KillChainResult) KillChainSummary {
+	summary := KillChainSummary{
+		TotalPhasesExecuted:  len(result.Phases),
+		TotalVulnerabilities: result.TotalVulnerabilities,
+		CriticalCount:        result.CriticalCount,
+		HighCount:            result.HighCount,
+		MediumCount:          result.MediumCount,
+		LowCount:             result.LowCount,
+	}
+
+	// Determine TLS security status
+	if result.TLSStatus == "compromised" {
+		summary.TLSSecurityStatus = "COMPROMISED - TLS protection bypassed"
+		summary.AttackChainCompleted = len(result.Phases) > 1
+	} else {
+		summary.TLSSecurityStatus = "SECURE - TLS protection effective"
+		summary.AttackChainCompleted = false
+	}
+
+	// Calculate security score
+	summary.SecurityScore = rg.calculateKillChainSecurityScore(result)
+
+	// Determine overall risk level based on score
+	switch {
+	case summary.SecurityScore < 20:
+		summary.OverallRiskLevel = "CRITICAL"
+	case summary.SecurityScore < 40:
+		summary.OverallRiskLevel = "HIGH"
+	case summary.SecurityScore < 60:
+		summary.OverallRiskLevel = "MEDIUM"
+	case summary.SecurityScore < 80:
+		summary.OverallRiskLevel = "LOW"
+	default:
+		summary.OverallRiskLevel = "MINIMAL"
+	}
+
+	// Count recommended actions
+	summary.RecommendedActions = min(result.TotalVulnerabilities, 10) + 2
+
+	return summary
+}
+
+// calculateKillChainSecurityScore calculates security score for kill chain results
+func (rg *ReportGenerator) calculateKillChainSecurityScore(result *attack.KillChainResult) int {
+	score := 100
+
+	// Major penalty if TLS was compromised
+	if result.TLSStatus == "compromised" {
+		score -= 40
+	}
+
+	// Penalties for vulnerabilities by severity
+	score -= result.CriticalCount * 15
+	score -= result.HighCount * 10
+	score -= result.MediumCount * 5
+	score -= result.LowCount * 2
+
+	// Penalty for attack chain completion
+	if len(result.Phases) > 1 {
+		score -= 10 * (len(result.Phases) - 1)
+	}
+
+	// Ensure score is within bounds
+	if score < 0 {
+		score = 0
+	}
+	if score > 100 {
+		score = 100
+	}
+
+	return score
+}
+
+// generateKillChainRecommendations creates recommendations based on kill chain results
+func (rg *ReportGenerator) generateKillChainRecommendations(result *attack.KillChainResult) []Recommendation {
+	var recommendations []Recommendation
+
+	// TLS-specific recommendations if compromised
+	if result.TLSStatus == "compromised" {
+		recommendations = append(recommendations, Recommendation{
+			Priority:    "critical",
+			Category:    "security",
+			Title:       "Fix TLS Configuration",
+			Description: fmt.Sprintf("TLS was compromised via: %s", result.CompromiseMethod),
+			Actions: []string{
+				"Disable support for SSL 3.0, TLS 1.0, and TLS 1.1",
+				"Configure server to only support TLS 1.2 and TLS 1.3",
+				"Remove weak cipher suites (RC4, DES, export ciphers)",
+				"Use certificates from trusted CAs only",
+				"Implement certificate pinning where appropriate",
+				"Enable HSTS with appropriate max-age",
+			},
+			References: []string{
+				"https://www.ssllabs.com/ssltest/",
+				"https://mozilla.github.io/server-side-tls/ssl-config-generator/",
+			},
+			EstimatedEffort: "4-8 hours",
+		})
+	} else {
+		recommendations = append(recommendations, Recommendation{
+			Priority:    "low",
+			Category:    "security",
+			Title:       "TLS Configuration Review",
+			Description: "TLS protection was effective - maintain current configuration",
+			Actions: []string{
+				"Continue monitoring TLS configuration",
+				"Schedule regular security assessments",
+				"Stay updated on new TLS vulnerabilities",
+			},
+			References: []string{
+				"https://www.ssllabs.com/ssltest/",
+			},
+			EstimatedEffort: "1-2 hours",
+		})
+	}
+
+	// Add recommendations based on vulnerability counts
+	if result.CriticalCount > 0 {
+		recommendations = append(recommendations, Recommendation{
+			Priority:    "critical",
+			Category:    "security",
+			Title:       "Address Critical Vulnerabilities Immediately",
+			Description: fmt.Sprintf("%d critical vulnerabilities were discovered", result.CriticalCount),
+			Actions: []string{
+				"Review all critical findings in this report",
+				"Implement fixes for critical vulnerabilities within 24 hours",
+				"Consider taking affected systems offline until fixed",
+				"Conduct incident response if exploitation is suspected",
+			},
+			References:      []string{},
+			EstimatedEffort: "Varies - prioritize based on risk",
+		})
+	}
+
+	// General security recommendations
+	recommendations = append(recommendations, Recommendation{
+		Priority:    "medium",
+		Category:    "security",
+		Title:       "Implement Defense in Depth",
+		Description: "Multiple layers of security reduce risk of successful attacks",
+		Actions: []string{
+			"Implement Web Application Firewall (WAF)",
+			"Enable intrusion detection/prevention systems",
+			"Implement rate limiting and DDoS protection",
+			"Set up security monitoring and alerting",
+			"Conduct regular penetration testing",
+		},
+		References: []string{
+			"https://owasp.org/www-project-web-security-testing-guide/",
+		},
+		EstimatedEffort: "16-40 hours",
+	})
+
+	return recommendations
+}
+
+// calculateFindingRiskScore calculates risk score for a single finding
+func (rg *ReportGenerator) calculateFindingRiskScore(severity, findingType string) int {
+	baseScore := 0
+
+	switch strings.ToLower(severity) {
+	case "critical":
+		baseScore = 90
+	case "high":
+		baseScore = 70
+	case "medium":
+		baseScore = 50
+	case "low":
+		baseScore = 30
+	default:
+		baseScore = 10
+	}
+
+	// Adjust based on type
+	switch {
+	case strings.Contains(findingType, "tls") || strings.Contains(findingType, "ssl"):
+		baseScore += 10
+	case strings.Contains(findingType, "injection"):
+		baseScore += 15
+	case strings.Contains(findingType, "auth"):
+		baseScore += 10
+	case strings.Contains(findingType, "escalation"):
+		baseScore += 20
+	}
+
+	return min(100, baseScore)
+}
