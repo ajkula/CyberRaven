@@ -53,7 +53,6 @@ Le tout est injecté automatiquement dans ta configuration pour alimenter les at
 | **API** | Endpoints REST | Énumération (220+ endpoints), method tampering, parameter pollution |
 | **Injection** | Paramètres vulnérables | SQL, NoSQL, JSON, path traversal |
 | **HMAC** | Authentification par signature | Replay attacks, timing side-channels, bypass de signature |
-| **DoS** | Disponibilité du service | Flooding, large payloads, épuisement de connexions |
 | **TLS** | Sécurité transport | Cipher suites, certificats, downgrade attacks, exploitation |
 
 ### Mode Kill Chain — Chaîne d'attaque progressive
